@@ -1,0 +1,16 @@
+boto3==1.43.91
+botocore==1.43.91
+fastapi==0.141.1
+google-genai==2.24.0
+joblib==1.6.0
+lightfm==1.17
+numpy==2.4.6
+openai==3.7.0
+pandas==3.0.5
+pydantic==2.13.5
+PyMySQL==1.2.0
+python-dotenv==1.2.3
+requests==2.34.2
+scipy==1.17.1
+trendspyg==1.8.0
+uvicorn==0.52.4

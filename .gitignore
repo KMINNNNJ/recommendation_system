@@ -1,1 +1,83 @@
+
+# Secrets / environment
+
+.env
+.env.*
+!.env.example
+airflow/.env
+
+# API key / credential files
 api_key.js
+*.pem
+*.key
+credentials.json
+service-account*.json
+
+
+# Python
+
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+
+# IDE
+
+.vs/
+.vscode/
+.idea/
+
+
+# Airflow runtime files
+
+airflow/logs/
+airflow/data/
+airflow/config/
+airflow/docker-compose.yaml
+
+# Local / downloaded data
+
+data/
+downloads/
+
+# CSV / large dataset files
+*.csv
+*.parquet
+
+
+# Trained models
+
+models/
+*.joblib
+*.pkl
+*.pickle
+*.pt
+*.pth
+*.h5
+
+
+# Database / local runtime
+
+*.db
+*.sqlite
+*.sqlite3
+
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+docker
+mariadb
+
+*.jpg
