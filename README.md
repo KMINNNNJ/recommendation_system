@@ -1,5 +1,5 @@
+<img width="1672" height="941" alt="데이터 흐름도 수정본" src="https://github.com/user-attachments/assets/2cc7cf04-1fa7-4602-ad7f-711e3149faea" />
 
-![Uploading 데이터 흐름도 수정본.png…]()
 
 BeautyLens
 사용자의 피부 정보와 자연어 질문을 바탕으로 화장품 후보를 탐색하고,  
