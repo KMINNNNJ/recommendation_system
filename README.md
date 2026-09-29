@@ -1,96 +1,160 @@
 # BeautyLens
 
-> **자연어 질의 해석과 개인화 추천을 결합한 화장품 추천 프로토타입**
+> **자연어 질의 처리와 개인화 추천을 결합한 화장품 추천 프로토타입**
 
-BeautyLens는 Sephora 상품·리뷰·성분 데이터와 MFDS 성분 정보를 활용해
-사용자의 자연어 요청을 구조화하고, 조건에 맞는 상품 후보를 찾은 뒤 개인화 순위를 제공하는 추천 프로토타입입니다.
+BeautyLens는 Sephora 상품/리뷰/성분 데이터와 MFDS 성분 정보를 활용해 사용자의 자연어 요청을 해석하고, 조건에 맞는 후보 상품을 찾은 뒤 LightFM으로 개인화 순위를 계산하는 추천 프로토타입입니다.
 
-현재는 **데이터 전처리 → 자연어 질의 해석 → 후보 상품 필터링 → LightFM Ranking → Fallback → FastAPI → Streamlit**까지 연결해 전체 추천 흐름을 검증했습니다.
+LLM이 상품 순위를 직접 결정하지 않도록 역할을 분리했습니다.
 
-> 현재 프로젝트는 프로토타입 단계이며, 추천 모델은 Baseline 비교와 Top-K 성능 개선을 진행 중입니다.
+- **OpenAI API**: 요청 유형 분류, 일반 화장품 Q&A, 추천 결과 자연어 설명
+- **Gemini**: 제품 추천 요청의 상세 조건 구조화
+- **MariaDB**: 성분/제품 유형 기반 후보 상품 검증 및 필터링
+- **LightFM**: 후보 상품의 개인화 Ranking
+- **Bayesian Ranking**: LightFM 결과를 만들 수 없을 때 내부 Catalog Fallback
+- **Gemini + Google Search**: 내부 DB에 후보 상품이 없을 때 외부 검색 Fallback
+- **Google Trends**: 추천 점수와 분리된 검색 관심도 참고 정보
 
----
+FastAPI와 Streamlit으로 전체 추천 흐름을 연결했고, AWS EC2 / RDS 환경에 프로토타입을 배포했습니다.
 
-## 1. Project Overview
-
-### 문제 정의
-
-일반적인 인기순·평점순 추천만으로는 화장품 선택에 필요한 개인 조건을 충분히 반영하기 어렵습니다.
-
-BeautyLens에서는 다음과 같은 정보를 추천 조건으로 활용합니다.
-
-- 피부 타입
-- 피부 고민
-- 피부톤
-- 눈 색상
-- 머리 색상
-- 원하는 성분
-- 제품 유형
-- 커버력·지속력·밀착력·발색 등 사용 목적
-
-사용자의 자연어 요청을 구조화한 뒤, DB에서 조건에 맞는 후보 상품을 먼저 찾고 추천 모델이 후보군의 순위를 계산하도록 구성했습니다.
-
-### 현재 구현 범위
-
-- Gemini 기반 자연어 Query Parsing
-- Sephora 리뷰 기반 User-Item Interaction 구성
-- 성분 파싱·정규화 및 상품-성분 Mapping
-- MFDS 성분 정보 결합
-- MariaDB 기반 Candidate Filtering
-- LightFM 기반 Personalized Ranking
-- Bayesian Ranking Fallback
-- DB 후보 부재 시 Gemini + Google Search 기반 외부 검색
-- Google Trends 검색 관심도 참고 정보
-- FastAPI + Streamlit 기반 추천 프로토타입
-- AWS EC2 / RDS 환경 배포
+> 현재는 프로토타입 단계이며, 추천 모델은 Baseline 비교와 Top-K 성능 개선을 진행 중입니다.
 
 ---
 
-## 2. System Architecture
+## Key Highlights
 
-<p align="center">
-  <img
-    src="https://github.com/user-attachments/assets/2cc7cf04-1fa7-4602-ad7f-711e3149faea"
-    alt="BeautyLens System Architecture"
-    width="100%"
-  />
-</p>
+- **2-Stage LLM Processing**  
+  OpenAI API로 요청 유형을 먼저 분류한 뒤, 제품 추천 요청은 Gemini가 피부 타입/고민/성분/제품 유형 등 상세 조건으로 구조화
+
+- **Candidate Filtering + Personalized Ranking**  
+  MariaDB에서 조건에 맞는 상품을 먼저 찾고 LightFM이 후보군의 순위를 계산
+
+- **Rule-based Validation**  
+  Gemini 결과를 그대로 사용하지 않고 제품 유형, 피부 고민, 추천 모드 등을 서버 로직에서 다시 정규화/검증
+
+- **Fallback Strategy**  
+  `LightFM → Bayesian Ranking → Gemini + Google Search`로 결과 부재 상황을 단계적으로 처리
+
+- **Offline Evaluation**  
+  LightFM 튜닝 후 Precision@10 **+9.7%**, Recall@10 **+6.6%**, AUC **+1.2%**
+
+- **End-to-End Prototype**  
+  데이터 처리부터 추천 API, UI, AWS 배포까지 연결
+
+---
+
+## 1. Recommendation Flow
 
 ```text
-Sephora Dataset / MFDS
-          ↓
-      Airflow
-          ↓
-       S3
-          ↓
-     Python ETL
-          ↓
-      MariaDB
-          ↓
-Gemini Query Parsing
-          ↓
- Candidate Filtering
-          ↓
-  LightFM Ranking
-          ↓
-   Fallback Logic
-          ↓
-       FastAPI
-          ↓
-      Streamlit
+사용자 자연어 입력
+        ↓
+OpenAI Intent Classification
+        ↓
+ ┌─────────────────────────────────────┐
+ │ General Question → OpenAI Q&A       │
+ │ Ingredient Trend → Google Trends    │
+ │ Product Recommendation              │
+ └─────────────────────────────────────┘
+        ↓
+Gemini Detailed Query Parsing
+        ↓
+Rule-based Normalization / Validation
+        ↓
+MariaDB Candidate Filtering
+        ↓
+LightFM Personalized Ranking
+        ↓
+Fallback Handling
+        ↓
+OpenAI Result Explanation
+        ↓
+FastAPI → Streamlit
 ```
 
-Google Trends는 LightFM Ranking Score에 합산하지 않고,
-추천 결과와 함께 제공하는 **검색 관심도 참고 정보**로 분리했습니다.
+OpenAI와 Gemini의 역할을 분리했습니다.
+
+OpenAI API는 먼저 요청을 다음 세 유형으로 분류합니다.
+
+```text
+general_question
+product_recommendation
+ingredient_trend
+```
+
+제품 추천으로 분류된 요청은 Gemini가 다시 세부 조건을 추출합니다.
+
+```text
+skin_type
+skin_tone
+eye_color
+hair_color
+skin_concerns
+ingredient
+product_type
+recommendation_mode
+performance_goal
+```
+
+---
+
+## 2. Query Parsing & Validation
+
+### Gemini 상세 조건 파싱
+
+예를 들어 다음 요청은
+
+```text
+"건성인데 모공 때문에 고민이야. 세럼 추천해줘."
+```
+
+다음과 같은 구조로 변환됩니다.
+
+```text
+skin_type = dry
+skin_concerns = [pores]
+product_type = serum
+recommendation_mode = skincare
+```
+
+Gemini 출력은 바로 추천에 사용하지 않습니다.
+
+서버에서 다음 항목을 다시 검증합니다.
+
+- 피부 타입/피부톤/눈 색상/머리 색상 표준화
+- 피부 고민 Alias 정규화
+- 너무 넓은 제품 유형 제거
+- `skincare` / `product_performance` 추천 모드 재판단
+- 성능 목적 정규화
+- 추천에 필요한 정보가 부족한 경우 `missing_fields` 생성
+
+### 추천 모드 분리
+
+BeautyLens는 요청을 크게 두 가지로 구분합니다.
+
+**Skincare**
+
+```text
+"모공이 고민인데 세럼 추천해줘"
+"건성 피부에 크림 추천해줘"
+"나이아신아마이드 세럼 추천해줘"
+```
+
+**Product Performance**
+
+```text
+"모공 커버 잘 되는 프라이머 추천해줘"
+"지속력 좋은 쿠션 추천해줘"
+"발색 좋은 립스틱 추천해줘"
+```
+
+제품 성능 요청에서는 사용자가 성분을 지정하지 않았다면 성분을 임의로 자동 선택하지 않습니다.
 
 ---
 
 ## 3. Data Pipeline
 
-### 3.1 Review Data
+### Review Data
 
-Sephora 데이터에는 일반적인 구매 이력 대신 리뷰 데이터가 중심이므로,
-리뷰 이력을 추천 모델에서 사용할 User-Item Interaction 형태로 가공했습니다.
+Sephora 데이터에는 일반적인 구매 이력보다 리뷰 데이터가 중심이므로 리뷰 이력을 User-Item Interaction 형태로 가공했습니다.
 
 ```text
 Sephora Review Data
@@ -106,11 +170,9 @@ MariaDB
 LightFM
 ```
 
-### 3.2 Ingredient Data
+### Ingredient Data
 
 상품 성분은 문자열 형태로 제공되기 때문에 그대로 조건 검색에 사용하기 어렵습니다.
-
-따라서 성분을 파싱·정규화한 뒤 상품과 성분을 별도 관계로 관리하도록 구조를 변경했습니다.
 
 ```text
 Sephora Product Data
@@ -133,180 +195,128 @@ MFDS 데이터는 성분명과 사용 제한 관련 정보를 보완하는 용�
 | Data | Role |
 | --- | --- |
 | `products` | 상품명, 브랜드, 가격, 평점, 리뷰 수 등 |
-| `ingredients` | 정규화된 성분 정보 및 MFDS 연계 정보 |
+| `ingredients` | 정규화 성분 및 MFDS 연계 정보 |
 | `product_ingredients` | 상품-성분 Mapping |
 | `interactions` | LightFM 학습용 User-Item Interaction |
 | `dataset_metadata` | 데이터셋 메타데이터 |
 
 ---
 
-## 4. Natural Language Query Parsing
+## 4. Candidate Filtering
 
-Gemini는 상품 Ranking을 직접 수행하지 않습니다.
-
-사용자의 자연어 입력을 추천 시스템이 사용할 수 있는 구조화된 조건으로 변환하는 역할을 담당합니다.
-
-### Parsed Fields
-
-```text
-skin_type
-skin_tone
-eye_color
-hair_color
-concerns
-ingredient
-product_type
-recommendation_mode
-performance_goal
-```
-
-예시:
-
-```text
-사용자 입력
-"건성인데 모공 때문에 고민이야. 세럼 추천해줘."
-
-        ↓
-
-skin_type = dry
-concerns = pores
-product_type = serum
-recommendation_mode = skincare
-```
-
-추천에 필요한 조건이 부족한 경우 추가 질문을 통해 정보를 보완합니다.
-
-```text
-사용자: 지속력 좋은 거 추천해줘
-BeautyLens: 원하는 제품 종류를 알려주세요.
-사용자: 쿠션
-```
-
-후속 답변은 이전 질문의 Context와 결합해 최종 추천 요청으로 처리합니다.
-
----
-
-## 5. Recommendation Flow
-
-BeautyLens의 추천 흐름은 크게 **조건 필터링 → 개인화 Ranking → Fallback**으로 구성됩니다.
-
-```text
-사용자 자연어 입력
-        ↓
-Gemini Query Parsing
-        ↓
-추천 조건 구조화
-        ↓
-MariaDB Candidate Filtering
-        ↓
-LightFM Personalized Ranking
-        ↓
-Fallback Handling
-        ↓
-추천 결과 반환
-```
-
-### Candidate Filtering
-
-사용자는 전체 화장품이 아니라 특정 조건을 포함한 상품을 요청합니다.
-
-예:
+사용자는 전체 상품이 아니라 특정 조건을 포함한 상품을 요청합니다.
 
 ```text
 "나이아신아마이드 세럼 추천해줘"
 "건성 피부에 크림 추천해줘"
-"모공 커버 잘 되는 프라이머 추천해줘"
 ```
 
-따라서 전체 상품을 바로 Ranking하지 않고,
-먼저 성분·제품 유형·사용 조건을 기준으로 후보 상품을 줄인 뒤 LightFM이 후보군의 순위를 계산하도록 구성했습니다.
+따라서 전체 상품을 바로 Ranking하지 않고 먼저 MariaDB에서 후보를 찾습니다.
 
----
-
-## 6. LightFM Recommendation
-
-현재 추천 모델은 **LightFM 기반 Personalized Ranking**을 사용합니다.
-
-Sephora 리뷰 데이터를 기반으로 User-Item Interaction을 구성하고,
-DB에서 필터링된 후보 상품을 대상으로 개인화 순위를 계산합니다.
+### 성분이 있는 요청
 
 ```text
-Review Interaction
-        ↓
-     LightFM
-        ↓
-Candidate Item Scores
-        ↓
-      Top-K
+Ingredient
+   ↓
+ingredients에서 성분명 / 한글명 / 동의어 확인
+   ↓
+product_ingredients JOIN
+   ↓
+Product Type Filter
+   ↓
+Candidate Pool
 ```
 
-### 현재 구현과 다음 단계
+### 성분이 없는 Skincare 요청
 
-| 구분 | 현재 구현 | 다음 개선 |
-| --- | --- | --- |
-| Interaction | 리뷰 기반 User-Item Interaction | Positive 정의 및 최소 Interaction 기준 재검토 |
-| Candidate | 성분·제품 유형 기반 DB Filtering | 조건별 후보군 품질 분석 |
-| User Feature | 입력 정보 수집 및 연동 구조 확보 | 피부 타입·고민·피부톤 등 Feature 실험 |
-| Item Feature | 상품·성분 DB 구조 확보 | 성분·카테고리 Feature 연동 |
-| Evaluation | LightFM 튜닝 전후 1차 비교 | Popularity / Item-CF / SVD Baseline 비교 |
+피부 고민과 피부 타입을 기준으로 **미리 정의한 성분 후보**를 생성합니다.
 
-> LightFM은 Side Feature를 함께 활용할 수 있는 모델이지만, 현재 README에서는 **구현 완료된 기능과 향후 Feature 확장 계획을 구분해 표현**합니다.
+```text
+Skin Concern / Skin Type
+        ↓
+Rule-based Ingredient Candidates
+        ↓
+DB Ingredient Validation
+        ↓
+Candidate Search
+        ↓
+LightFM 추천 가능 여부 확인
+```
+
+즉, LLM이 임의로 성분을 만들어 추천하는 구조가 아니라 서버에 정의한 Mapping과 실제 DB를 함께 확인합니다.
 
 ---
 
-## 7. Offline Evaluation
+## 5. LightFM Recommendation
 
-현재 LightFM의 튜닝 전후 결과를 동일한 지표로 비교했습니다.
+DB에서 만들어진 후보군을 대상으로 LightFM Ranking을 수행합니다.
+
+```text
+Candidate Product IDs
+        ↓
+User Profile
+- skin_type
+- skin_tone
+- eye_color
+- hair_color
+        ↓
+recommend_new_user_from_candidates()
+        ↓
+LightFM Ranking
+        ↓
+Top-K
+```
+
+현재 추천 흐름에서는 사용자 프로필 값을 LightFM 추천 함수에 전달합니다.
+
+다만 이 README에서는 내부 모델의 Side Feature 구성 방식이나 Cold-start 효과를 실제 모델 코드와 별도 평가 없이 과장하지 않습니다.
+
+### 현재 모델 개선 상태
 
 | Model | Precision@10 | Recall@10 | AUC |
 | --- | ---: | ---: | ---: |
 | Untuned LightFM | 0.015545 | 0.110722 | 0.854744 |
 | Tuned LightFM | 0.017057 | 0.118033 | 0.865102 |
 
-튜닝 후 세 지표 모두 개선됐습니다.
+튜닝 후 상대 개선율:
 
-- Precision@10: 약 **+9.7%**
-- Recall@10: 약 **+6.6%**
-- AUC: 약 **+1.2%**
+- Precision@10: **+9.7%**
+- Recall@10: **+6.6%**
+- AUC: **+1.2%**
 
-다만 AUC에 비해 Precision@10과 Recall@10이 낮게 나타났기 때문에,
-현재는 단순히 Epoch을 더 늘리기보다 **Top-K 성능이 낮은 원인을 먼저 점검**하고 있습니다.
-
-### 현재 확인 중인 항목
+AUC에 비해 Precision@10과 Recall@10이 낮기 때문에 단순 추가 학습보다 평가 구조와 데이터 구성을 먼저 점검하고 있습니다.
 
 ```text
 Interaction 정의
-        ↓
+      ↓
 Train / Test Split
-        ↓
+      ↓
 Data Sparsity
-        ↓
+      ↓
 Cold-start
-        ↓
+      ↓
 User / Item Feature
-        ↓
+      ↓
 Hyperparameter Tuning
 ```
 
-현재 비교는 LightFM 내부의 튜닝 전후 비교이므로,
-다음 단계에서는 Popularity, Item-based CF, SVD를 동일한 Split과 동일한 Metric으로 비교할 예정입니다.
+현재 비교는 LightFM 내부의 튜닝 전후 비교이므로 다음 단계에서는 Popularity, Item-based CF, SVD를 동일한 조건에서 비교할 예정입니다.
 
 ---
 
-## 8. Fallback Strategy
+## 6. Fallback Strategy
 
-추천 모델에서 결과가 생성되지 않는 상황을 별도로 처리합니다.
+추천 결과가 생성되지 않는 상황을 세 단계로 처리합니다.
 
 | Priority | Method | Condition |
 | --- | --- | --- |
-| 1 | LightFM | DB 후보가 존재하고 LightFM Ranking이 가능한 경우 |
-| 2 | Bayesian Ranking | DB 후보는 존재하지만 LightFM 결과를 사용할 수 없는 경우 |
-| 3 | Gemini + Google Search | DB에 조건과 맞는 후보 상품이 없는 경우 |
+| 1 | **LightFM** | DB 후보가 있고 모델 추천이 가능한 경우 |
+| 2 | **Bayesian Ranking** | DB 후보는 있지만 LightFM 결과가 없는 경우 |
+| 3 | **Gemini + Google Search** | DB 후보 자체가 없는 경우 |
 
 ### Bayesian Ranking
 
-리뷰 수가 적은 상품이 높은 평균 평점만으로 과대평가되는 문제를 줄이기 위해
-Fallback Ranking에서는 평균 평점과 리뷰 수를 함께 고려합니다.
+내부 DB 후보가 있지만 LightFM 결과를 만들 수 없는 경우 평균 평점과 리뷰 수를 함께 고려해 순위를 계산합니다.
 
 ```text
 Weighted Rating
@@ -316,31 +326,35 @@ Weighted Rating
 
 - `R`: 상품 평균 평점
 - `v`: 상품 리뷰 수
-- `C`: 전체 상품 평균 평점
-- `m`: 최소 리뷰 기준값
+- `C`: 후보 상품 평균 평점
+- `m`: 후보 상품 리뷰 수 기준값
 
-Bayesian Ranking은 LightFM을 대체하는 주 모델이 아니라 **Fallback**으로 사용합니다.
+이 방식은 LightFM을 대체하는 주 모델이 아니라 내부 Catalog Fallback입니다.
 
-### Web Search
+### Gemini + Google Search
 
-내부 DB에 조건과 일치하는 후보 상품이 없는 경우 Gemini + Google Search를 이용해 외부 상품을 탐색합니다.
+DB에 현재 조건과 일치하는 후보 상품이 없는 경우에만 외부 상품을 실시간 탐색합니다.
 
 외부 검색 결과는:
 
-- 내부 DB에 저장하지 않음
+- MariaDB에 자동 저장하지 않음
 - 요청 시점에만 조회
-- 내부 개인화 추천과 구분해 표시
+- 데이터셋 기반 개인화 추천과 구분
 - LightFM Score와 합산하지 않음
+- 검색 결과에 없는 가격/평점/리뷰 수를 생성하지 않음
 
 ---
 
-## 9. Google Trends
+## 7. Google Trends
 
-Google Trends는 추천 모델의 Ranking Score에 직접 사용하지 않습니다.
+Google Trends는 추천 Ranking Score에 직접 반영하지 않습니다.
 
 ```text
 LightFM
 → 개인화 추천
+
+Bayesian Ranking
+→ 내부 Catalog Fallback
 
 Gemini + Google Search
 → DB 후보 부재 시 외부 검색
@@ -349,29 +363,45 @@ Google Trends
 → 검색 관심도 참고 정보
 ```
 
-개인화 추천과 외부 검색 관심도는 의미가 다르기 때문에 UI에서도 별도 영역으로 제공합니다.
+현재 서비스는 최근 12개월 데이터를 조회하며, 최근 4주 평균과 직전 4주 평균을 비교해 변화율을 제공합니다.
+
+Google Trends의 0~100 값은 실제 검색 건수가 아니라 선택한 지역과 기간에서의 상대적 검색 관심도입니다.
 
 ---
 
-## 10. API & Deployment
+## 8. Product Performance Request
 
-추천 로직은 FastAPI Backend로 분리하고 Streamlit에서 호출하도록 구성했습니다.
+현재 데이터셋에는 다음과 같은 제품 사용 성능에 대한 직접적인 Label이 없습니다.
 
 ```text
-Recommendation Request
-        ↓
-Query Parsing
-        ↓
-Candidate Filtering
-        ↓
-Recommendation Engine
-        ↓
-Fallback Handling
-        ↓
-API Response
+커버력
+블러
+지속력
+밀착력
+발색
 ```
 
-### Deployment
+따라서 `"지속력 좋은 쿠션"`과 같은 요청은 의도와 제품 유형을 파악할 수 있지만, 실제 지속력이 더 우수하다고 학습하거나 검증한 Ranking은 아닙니다.
+
+현재 로직은:
+
+```text
+Performance Request
+        ↓
+Product Type / Performance Goal Parsing
+        ↓
+Product Type Candidate Filtering
+        ↓
+LightFM Ranking
+```
+
+DB 후보가 없는 경우에만 외부 검색 결과를 별도로 제공합니다.
+
+---
+
+## 9. API & Deployment
+
+FastAPI는 요청 라우팅과 추천 엔진 호출을 담당하고, Streamlit은 사용자 UI를 담당합니다.
 
 ```text
 Internet
@@ -387,35 +417,65 @@ Internet
        RDS MariaDB :3306
 ```
 
-AWS EC2 환경에서 FastAPI와 Streamlit 서비스를 실행하고,
-systemd와 Nginx Reverse Proxy를 구성해 외부 접속 가능한 프로토타입 환경을 구성했습니다.
+AWS EC2에서 FastAPI와 Streamlit 서비스를 실행하고, systemd와 Nginx Reverse Proxy를 구성해 외부 접속 가능한 프로토타입 환경을 구축했습니다.
+
+### Offline / Online 분리
+
+```text
+[Offline]
+
+Sephora / MFDS
+      ↓
+Airflow
+      ↓
+S3 / Python ETL
+      ↓
+MariaDB / Model
+
+
+[Online]
+
+User Request
+      ↓
+OpenAI / Gemini
+      ↓
+Candidate Filtering
+      ↓
+LightFM / Fallback
+      ↓
+FastAPI
+      ↓
+Streamlit
+```
+
+Airflow와 ETL은 실시간 사용자 요청마다 실행되는 구조가 아닙니다.
 
 ---
 
-## 11. Key Modules
+## 10. Key Modules
 
 | File | Role |
 | --- | --- |
 | `airflow/dags/ingredient_pipeline.py` | Sephora 성분 정제 및 MFDS 정보 결합 |
 | `airflow/dags/review_pipeline.py` | 리뷰 전처리 및 Interaction 생성 |
-| `src/cosmetics/query/user_query_parser.py` | Gemini 기반 자연어 Query Parsing |
-| `src/cosmetics/ingredients/ingredient_repository.py` | 후보 상품 검색 및 추천 흐름 관리 |
+| `src/cosmetics/query/user_query_parser.py` | Gemini 기반 상세 추천 조건 파싱 및 정규화 |
+| `src/cosmetics/ingredients/ingredient_repository.py` | 후보 상품 필터링, 자동 성분 후보, 추천/Fallback 흐름 |
 | `src/recommendation/sephora_lightfm.py` | LightFM Ranking |
 | `src/cosmetics/trends/google_trends_collector.py` | Google Trends 조회 |
-| `src/cosmetics/trends/product_trend_collector.py` | 외부 상품 검색 |
-| `src/api/main.py` | FastAPI Backend |
+| `src/cosmetics/trends/product_trend_collector.py` | Gemini + Google Search 외부 상품 탐색 |
+| `src/api/main.py` | OpenAI Intent 분류/응답 생성 및 FastAPI Backend |
 | `streamlit/streamlit_app.py` | Streamlit UI |
 
 ---
 
-## 12. Tech Stack
+## Tech Stack
 
 | Category | Technology |
 | --- | --- |
 | Language | Python |
 | Recommendation | LightFM |
-| LLM | Gemini API |
-| Search | Google Search Grounding |
+| LLM | OpenAI API, Gemini API |
+| Search | Google Search |
 | Data Processing | Pandas, NumPy, SciPy |
 | Backend | FastAPI, Uvicorn |
 | Frontend | Streamlit |
@@ -424,87 +484,66 @@ systemd와 Nginx Reverse Proxy를 구성해 외부 접속 가능한 프로토타
 | Storage | Amazon S3, Boto3 |
 | Trend Data | Google Trends |
 | External Data | Sephora Dataset, MFDS |
+| Deployment | AWS EC2, RDS, Nginx, systemd |
 
 ---
 
-## 13. Current Limitations
+## Current Limitations & Next Steps
 
-### Recommendation Model
+### 현재 한계
 
-현재 모델 비교는 LightFM의 튜닝 전후 결과에 한정되어 있습니다.
+1. 현재 모델 비교는 LightFM 튜닝 전후 결과에 한정되어 있음
+2. AUC에 비해 Precision@10 / Recall@10이 낮음
+3. 제품 성능에 대한 직접 Label이 없어 성능 우수성을 학습한 모델은 아님
+4. 사용자 프로필을 전달하는 추천 구조는 구현했지만 Cold-start 효과는 별도 평가가 필요함
 
-따라서 LightFM의 상대적인 성능을 판단하기 위해 다음 Baseline 비교가 필요합니다.
+### 다음 실험
 
 ```text
 Popularity
 → Item-based CF
 → SVD
 → LightFM
-→ Tuned / Feature LightFM
+→ Feature / Tuned LightFM
 ```
 
-### Product Performance Data
-
-현재 데이터셋에는 다음과 같은 사용 성능에 대한 직접적인 Label이 없습니다.
-
-```text
-커버력
-블러
-지속력
-밀착력
-발색
-```
-
-따라서 해당 요청의 의도와 제품 유형은 해석할 수 있지만,
-해당 성능 자체가 더 우수하다고 학습하거나 검증한 Ranking은 아닙니다.
-
-### Cold-start
-
-LightFM은 User / Item Side Feature를 사용할 수 있지만,
-현재는 Side Feature를 포함한 Cold-start 성능을 별도로 검증하는 단계가 남아 있습니다.
-
-따라서 **Cold-start를 해결했다고 표현하지 않고, 향후 Feature 적용 및 평가 대상으로 구분**합니다.
-
----
-
-## 14. Next Steps
-
-1. Popularity / Item-CF / SVD Baseline 구축
-2. 동일한 Split과 Metric으로 모델 비교
-3. Interaction Positive 기준 재검토
-4. Random Split 외 User-based / Temporal Split 검토
-5. User / Item Side Feature 실험
-6. Precision@K / Recall@K 중심 Top-K 성능 분석
-7. Cold-start User Cohort 별 성능 비교
-8. LightFM Hyperparameter 재튜닝
-9. Query Parsing Validation 강화
-10. 모델 및 데이터 모니터링 구조 개선
+- 동일한 Split / Metric으로 모델 비교
+- Interaction Positive 기준 재검토
+- Random Split 외 User-based / Temporal Split 검토
+- User / Item Feature 효과 검증
+- Cold-start User Cohort 분석
+- Precision@K / Recall@K 중심 Top-K 성능 개선
 
 ---
 
 ## Summary
 
-BeautyLens는 단순히 추천 알고리즘 하나를 구현하는 것보다,
+BeautyLens는 하나의 LLM이 추천을 모두 수행하는 구조가 아닙니다.
 
 ```text
-Data Processing
-      ↓
-Database
-      ↓
-Natural Language Query Parsing
-      ↓
-Candidate Filtering
-      ↓
-Personalized Ranking
-      ↓
-Fallback
-      ↓
-API
-      ↓
-User Application
+OpenAI API
+→ 요청 유형 분류 / 일반 Q&A / 추천 결과 설명
+
+Gemini
+→ 제품 추천 요청의 상세 조건 구조화
+
+Server Rules
+→ 값 정규화 / 추천 모드 판단 / 자동 성분 후보 생성
+
+MariaDB
+→ 성분/제품 유형 검증 및 Candidate Filtering
+
+LightFM
+→ Personalized Ranking
+
+Bayesian Ranking
+→ Internal Catalog Fallback
+
+Gemini + Google Search
+→ External Search Fallback
+
+Google Trends
+→ Search Interest Reference
 ```
 
-으로 이어지는 추천 흐름을 실제 프로토타입으로 연결하는 데 초점을 두었습니다.
-
-현재는 서비스 기능을 더 추가하기보다
-**Baseline 비교 → 평가 방식 점검 → Top-K 성능 개선** 순서로 추천 모델 자체를 보강하고 있습니다.
+현재는 서비스 기능을 더 추가하기보다 **Baseline 비교 → 평가 방식 점검 → Top-K 성능 개선** 순서로 추천 모델을 보강하고 있습니다.
