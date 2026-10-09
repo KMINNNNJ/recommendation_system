@@ -80,5 +80,6 @@ desktop.ini
 docker
 mariadb
 
-*.jpgvenv/ 
+*.jpg
+venv/ 
 .env
