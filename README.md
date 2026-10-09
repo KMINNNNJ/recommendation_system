@@ -464,7 +464,7 @@ Airflow와 ETL은 실시간 사용자 요청마다 실행되는 구조가 아닙
 | `src/cosmetics/trends/google_trends_collector.py` | Google Trends 조회 |
 | `src/cosmetics/trends/product_trend_collector.py` | Gemini + Google Search 외부 상품 탐색 |
 | `src/api/main.py` | OpenAI Intent 분류/응답 생성 및 FastAPI Backend |
-| `streamlit/streamlit_app.py` | Streamlit UI |
+| `streamlit/streamlit.py` | Streamlit UI |
 
 ---
 
