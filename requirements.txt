@@ -14,3 +14,6 @@ requests==2.34.2
 scipy==1.17.1
 trendspyg==1.8.0
 uvicorn==0.52.4
+streamlit 
+apache-airflow
+pendulum
