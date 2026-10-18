@@ -1,0 +1,14 @@
+{
+  "note": "Single local run; not an end-to-end API latency measurement.",
+  "model_file_bytes": 86815641,
+  "cold_model_load_seconds": 2.917315199971199,
+  "warm_model_load_seconds": 0.0014254003763198853,
+  "real_model_candidate_count": 500,
+  "original_recommend_seconds": 1.1394926002249122,
+  "optimized_warm_recommend_seconds": 0.0049715000204741955,
+  "real_model_results_equal": true,
+  "synthetic_candidate_count": 100000,
+  "full_sort_seconds": 0.08026410033926368,
+  "top_k_seconds": 0.00677750026807189,
+  "synthetic_results_equal": true
+}
