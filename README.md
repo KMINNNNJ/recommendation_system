@@ -1,112 +1,81 @@
-# BeautyLens · 신규 사용자 스킨케어 추천
+# BeautyLens
 
-Sephora 상품·리뷰 데이터를 바탕으로 사용 이력이 없는 사용자에게 스킨케어 상품을 추천하는 프로젝트입니다. 기존 서비스 코드의 처리 효율 개선과 신규 사용자 모델 실험을 `optimized/`에서 별도로 진행했습니다.
+Sephora 상품·리뷰 데이터로 사용 이력이 없는 사용자에게 스킨케어 상품을 추천하는 프로젝트다. 피부 타입과 원하는 제품을 입력하면 조건에 맞는 후보를 찾고, LightFM으로 순위를 계산한다.
 
-## 먼저 보기
+처음에는 자연어 추천 서비스를 구현했고, 이후 코드에서 반복되는 처리를 줄이고 신규 사용자 기준으로 모델을 다시 평가했다. 수정한 코드와 실험은 `optimized/`에 모았다.
 
-- **성과와 한계:** [최종 결과 보고서](optimized/portfolio/FINAL_REPORT.md)
-- **직접 실행:** [원본·개선 모델 비교 데모](optimized/portfolio/README.md)
-- **구현 변경:** [서비스 개선 코드와 검증](optimized/README.md)
+## 모델 비교 결과
 
-프로젝트의 핵심은 이력이 없는 사용자에게 맞는 평가를 설계하고, 원본 학습 설정을 같은 조건에서 재현하여 비교한 것입니다. 신규 사용자 NDCG@10을 약 35% 개선했으며, 효과가 없었던 부정 리뷰 모델과 상품 쏠림 문제도 결과에 포함했습니다.
+원본 노트북의 30회 학습 설정을 같은 학습 사용자로 다시 학습해 비교했다. 테스트는 학습에 참여하지 않은 사용자 10,000명이며, 후보 상품과 정답도 두 모델에 동일하게 적용했다.
 
-## 현재 상태
-
-**새 모델의 서비스 적용은 아직 하지 않았습니다.** 자연어 추천 화면은 기존 LightFM 모델을 사용하고, 비교 데모는 기존 모델과 새 개선 모델의 결과를 나란히 보여줍니다. 아래 약 35% 향상은 신규 사용자 오프라인 평가 결과이며 실제 서비스 만족도 향상을 의미하지 않습니다.
-
-| 구성 | 위치 | 사용하는 모델 / 역할 |
-|---|---|---|
-| 원본 서비스 | `src/`, `streamlit/`, `airflow/` | 기존 코드 보존 |
-| 서비스 개선본 | `optimized/src/`, `optimized/streamlit/` | 기존 모델 유지, 로딩 캐시·조회 처리 및 화면 개선 |
-| 신규 사용자 실험 | `optimized/cold_start_benchmark/` | 사용자 분리·8개 설정 비교·원본 학습 설정 재현 |
-| 후속 실험 | `optimized/cold_start_improvements/` | 부정 리뷰 학습·조건별 평가·다양성 재정렬 |
-| 포트폴리오 데모 | `optimized/portfolio/` | 원본 설정 재학습 모델과 개선 학습 모델 비교 |
-
-이 변경은 원본 코드를 보존하고 `optimized/`를 추가하는 방식입니다. 서비스 개선본 화면에는 답변 글자 대비 보정, 처리 중 안내, 완료·시간 초과·연결 실패 표시를 적용했습니다. 코드 공개와 로컬 실행까지의 범위이며 클라우드 공개 배포는 수행하지 않았습니다.
-
-## 추천 서비스와 모델 실험의 관계
-
-```mermaid
-flowchart LR
-    A[자연어 추천 화면 · 8503] --> B[FastAPI · 8001]
-    B --> C[OpenAI·Gemini로 요청 해석]
-    C --> D[MariaDB에서 조건별 후보 조회]
-    D --> E[기존 LightFM 모델로 순위 계산]
-    E --> F[결과 설명과 트렌드 참고 정보]
-    G[비교 데모 · 8502] --> H[저장된 원본·개선 모델 비교]
-```
-
-OpenAI·Gemini는 요청 해석과 설명을 담당하고 LightFM이 후보의 순위를 계산합니다. DB 후보가 없거나 모델 지원 범위에 없는 경우에는 기존 서비스의 카탈로그·웹 검색 대체 경로가 적용됩니다. Google Trends는 순위와 별개인 관심도 참고 정보입니다.
-
-AWS S3는 상품·리뷰·성분 처리 파일을 저장하는 데이터 준비 단계에서 사용합니다. 현재 로컬 추천은 DB와 모델을 읽어 실행하며, EC2를 새로 만들지 않아도 확인할 수 있습니다. S3 적재와 Airflow 실행은 추천 화면 실행과 별도로 설정합니다.
-
-## 결과
-
-동일한 신규 사용자 10,000명, 동일 후보·정답에서 원본 노트북의 30회 학습 설정을 공통 학습 사용자로 재학습한 결과와 비교했습니다.
-
-| 설정 | Precision@10 | Recall@10 | NDCG@10 |
+| 모델 | Precision@10 | Recall@10 | NDCG@10 |
 |---|---:|---:|---:|
 | 원본 설정 재학습 | 0.01933 | 0.10441 | 0.06200 |
 | 개선 프로필 LightFM | 0.02178 | 0.13324 | 0.08388 |
 
-NDCG@10 상대 향상은 약 **35.3%**입니다. 전처리·특징·학습 설정의 여러 변경이 합쳐진 결과이며, 온라인 만족도 향상을 측정한 것은 아닙니다. 후속 재정렬은 브랜드 중복을 줄였지만 정확도와 전체 상품 노출 범위 개선은 확인하지 못했습니다.
+NDCG@10은 원본 설정 대비 약 35.3% 높아졌다. 전처리와 학습 구성을 함께 바꾼 결과라, 어느 한 변경만의 효과로 보기는 어렵다.
 
-- [최종 결과와 한계](optimized/portfolio/FINAL_REPORT.md)
-- [발표·면접 설명 예시](optimized/portfolio/PRESENTATION.md)
+부정 리뷰를 함께 학습한 모델은 성능이 낮아 제외했다. 추천 목록을 재정렬하는 실험에서는 평균 브랜드 수가 7.70개에서 9.41개로 늘었지만, 정확도와 전체 상품 노출 범위는 개선되지 않았다.
 
-## 설치 환경을 구분하세요
+[실험 결과와 한계](optimized/portfolio/FINAL_REPORT.md) · [모델 비교 노트북](optimized/cold_start_benchmark/model_comparison.ipynb)
 
-검증한 Python은 **3.11.9**입니다.
+## 현재 코드 상태
 
-| 실행 목적 | 설치 목록 | LightFM 패키지 |
-|---|---|---|
-| 기존 서비스 / 서비스 개선본 | `requirements.txt` 또는 `optimized/requirements.txt` | `lightfm==1.17` |
-| 신규 사용자 전체 모델 실험 | `optimized/cold_start_benchmark/requirements.txt` | `lightfm-next==1.19.0`, 실험 전용 `.packages` |
-| 저장 모델 비교 데모 | `optimized/portfolio/requirements.txt` 및 데모 안내의 LightFM 준비 | 저장된 실험 모델을 읽는 데 필요한 런타임 |
+**자연어 추천 서비스는 아직 기존 모델을 사용한다.** 새 모델은 비교 데모에서 실행할 수 있다. 위 성능 수치는 신규 사용자 오프라인 평가 결과다.
 
-`lightfm`과 `lightfm-next`는 서로 다른 배포 패키지지만 모두 Python에서는 `lightfm`으로 import합니다. 각 안내대로 설치하고 같은 환경에 두 배포판을 무작정 함께 설치하지 마세요. Windows의 신규 실험 WARP 재학습에는 MSVC와 [전용 수정 빌드](optimized/cold_start_benchmark/README.md#windows-lightfm-실행-수정)가 필요합니다. 저장 모델 추론 확인은 재학습 빌드 검증을 대신하지 않습니다.
+| 경로 | 내용 |
+|---|---|
+| `src/`, `streamlit/`, `airflow/` | 원본 서비스 |
+| `optimized/src/`, `optimized/streamlit/` | 모델 캐시·조회 처리·화면을 수정한 서비스 |
+| `optimized/cold_start_benchmark/` | 데이터 정제, 사용자 분리, 모델 비교, 원본 설정 재현 |
+| `optimized/cold_start_improvements/` | 부정 리뷰 학습과 다양성 실험 |
+| `optimized/portfolio/` | 원본·개선 모델 비교 화면, 실행 안내, 결과 문서 |
 
-## 코드만 clone하면 바로 실행되지는 않습니다
+서비스 코드에서 바꾼 부분은 [optimized README](optimized/README.md)에 정리했다.
 
-비밀키, 원본 데이터, DB 내용, 학습 모델, 실행별 `artifacts/`는 Git에 포함하지 않습니다. 공개 문서에는 집계 결과를 남겼습니다. 상세 결과·그래프에 대한 일부 링크는 로컬 산출물용이므로 GitHub에서는 해당 파일이 없을 수 있습니다.
+## 추천 흐름
 
-### 1. 비교 데모
-
-API 키·DB·S3 없이 실행하지만 **저장된 원본/개선 모델과 상품 feature, 선택 설정**이 필요합니다. 파일별 경로와 재학습 순서는 [데모 실행 안내](optimized/portfolio/README.md)에 있습니다. 코드만으로 모델이 자동 다운로드되지는 않습니다.
-
-현재 준비된 PC에서는:
-
-```powershell
-& .\optimized\portfolio\run_demo.ps1
+```mermaid
+flowchart LR
+    A[사용자 질문] --> B[OpenAI·Gemini로 요청 해석]
+    B --> C[MariaDB에서 후보 조회]
+    C --> D[LightFM 순위 계산]
+    D --> E[추천 결과와 설명]
+    F[Google Trends] --> E
 ```
 
-기본 주소는 `http://127.0.0.1:8502`입니다. 스크립트의 Python 경로가 다르면 `-PythonPath`를 지정하세요.
+LLM은 요청을 해석하고 결과를 설명한다. DB 안의 상품 순위는 LightFM이 계산한다. 모델이 지원하지 않는 후보는 평점·리뷰 수로 대체 순위를 만들고, DB에 후보 자체가 없으면 웹 검색을 시도한다. Google Trends는 추천 점수와 분리해서 보여준다.
 
-### 2. 기존 서비스 개선본
+S3는 상품·리뷰·성분 처리 파일을 저장하는 데 사용한다. Airflow는 이 파일을 정제해 DB에 적재한다. 데이터가 준비된 뒤에는 로컬 DB와 모델로 추천할 수 있어, 로컬 실행에 EC2가 필요하지는 않다.
 
-다음 준비물이 필요합니다.
+## 실행
 
-- 상품·성분·상품-성분 연결 데이터가 적재된 MariaDB
-- 기존 서비스용 `models/sephora_hybrid_lightfm.joblib`
-- 본인 환경의 `.env`: DB 연결과 OpenAI/Gemini 키·접근 가능한 모델명
-- 데이터 준비 파이프라인을 실행한다면 별도의 S3·AWS 자격 증명 설정
+Python 3.11.9에서 확인했다. API 키, 데이터, DB 내용, 학습 모델은 저장소에 포함하지 않았다. 아래 명령을 실행하기 전에 각 준비물을 갖춰야 한다.
 
-프로젝트 루트에서 Python 3.11 가상환경을 준비하고 실행합니다. Windows에서 원본 LightFM을 소스 빌드하는 환경에는 C/C++ 빌드 도구가 필요할 수 있습니다.
+### 모델 비교 데모
+
+저장된 원본·개선 모델, 상품 feature, 선택 설정이 필요하다. DB나 외부 API는 사용하지 않는다. 필요한 파일 목록과 설치 순서는 [데모 README](optimized/portfolio/README.md)에 있다.
+
+프로젝트 루트에서:
+
+```powershell
+python -m streamlit run optimized/portfolio/app.py --server.address 127.0.0.1 --server.port 8502 --server.headless true --browser.gatherUsageStats false
+```
+
+`http://127.0.0.1:8502`에서 프로필·제품 종류·예산을 입력해 두 모델의 추천을 비교할 수 있다.
+
+### 자연어 추천 서비스
+
+MariaDB의 상품·성분 데이터, 기존 `models/sephora_hybrid_lightfm.joblib`, OpenAI·Gemini 설정이 필요하다. `.env.example`을 참고해 본인 환경의 `.env`를 작성한다.
 
 ```powershell
 python -m venv .venv-service
 $servicePython = (Resolve-Path '.venv-service\Scripts\python.exe').Path
 & $servicePython -m pip install -r optimized/requirements.txt
-
-# .env가 아직 없는 새 checkout에서만 템플릿을 복사합니다.
-if (-not (Test-Path -LiteralPath '.env')) {
-    Copy-Item -LiteralPath '.env.example' -Destination '.env'
-}
-# 실행 전 .env의 빈 항목을 본인 설정으로 채우세요.
 & $servicePython -m uvicorn optimized.src.api.main:app --host 127.0.0.1 --port 8001
 ```
 
-다른 터미널에서:
+다른 터미널에서 화면을 실행한다.
 
 ```powershell
 $servicePython = (Resolve-Path '.venv-service\Scripts\python.exe').Path
@@ -114,27 +83,31 @@ $env:RECOMMEND_API_URL = 'http://127.0.0.1:8001/chat/recommend'
 & $servicePython -m streamlit run optimized/streamlit/streamlit.py --server.address 127.0.0.1 --server.port 8503 --server.headless true --browser.gatherUsageStats false
 ```
 
-API는 `http://127.0.0.1:8001`, 화면은 `http://127.0.0.1:8503`입니다. `/health`는 API의 응답 여부만 확인하며 DB·S3·LLM 전체 연동을 보장하지 않습니다. EC2는 로컬 실행에 필수가 아닙니다.
+화면 주소는 `http://127.0.0.1:8503`이다. `/health`는 API가 응답하는지만 확인한다.
 
-원본과 신규 학습 모델은 저장 구조가 다르므로 신규 체크포인트를 기존 모델 경로에 단순 덮어쓰지 마세요. 서비스에 새 모델을 적용하는 어댑터 작업은 별도 범위입니다.
+### 패키지와 재학습
 
-## 검증과 재학습
+서비스는 `lightfm==1.17`, 새 모델 실험은 `lightfm-next==1.19.0`을 사용한다. 두 패키지는 import 이름이 같아 실험에서는 별도 `.packages` 경로를 사용했다. 서비스 설치와 실험 설치는 아래 안내대로 구분한다.
 
-- [서비스 코드 변경 설명 및 회귀 검증](optimized/README.md)
-- [신규 사용자 모델 실험](optimized/cold_start_benchmark/README.md)
-- [부정 리뷰·다양성 실험](optimized/cold_start_improvements/README.md)
-- [데모 설치·검증·전체 재학습 순서](optimized/portfolio/README.md)
+- [서비스 수정 및 실행](optimized/README.md)
+- [모델 실험과 Windows 빌드](optimized/cold_start_benchmark/README.md)
+- [전체 재학습 순서](optimized/portfolio/README.md#3-전체-학습을-다시-실행하려면)
 
-현재 PC에서 코드와 저장 모델을 검증했습니다. 이 안내를 작성하면서 새 가상환경 설치나 전체 데이터 재학습을 다시 실행하지는 않았습니다.
+Windows에서 LightFM을 소스 빌드하려면 C/C++ 빌드 도구가 필요할 수 있다. 새 실험의 WARP 학습에는 문서에 적은 수정 빌드가 필요하다. 새 모델은 저장 구조도 달라 기존 서비스 모델 파일에 덮어쓰는 것으로 연결되지는 않는다.
 
-서비스 코드의 회귀 검증과 화면 성공·시간 초과·S3 설정 누락 처리는 다음 명령으로 확인할 수 있습니다. 외부 API 호출이나 실제 S3 적재 없이 실행하는 테스트입니다.
+## 검증
+
+서비스 회귀 테스트와 모델 평가 테스트는 외부 API·S3를 호출하지 않고 실행한다.
 
 ```powershell
-& $servicePython -m unittest discover -s optimized/tests -v
+python -m unittest discover -s optimized/tests -v
+python -m unittest optimized.cold_start_benchmark.test_experiment optimized.cold_start_improvements.test_improvements -v
 ```
 
-학습 모델·데모까지 확인하려면 필요한 산출물을 준비한 후 별도 실험 환경에서 `python -m optimized.portfolio.verify`를 실행하세요. 데이터와 모델은 GitHub에서 자동 제공하지 않습니다.
+서비스·화면 테스트 11개, 모델 평가 테스트 14개가 통과했다. 저장된 모델까지 확인하는 `python -m optimized.portfolio.verify`는 [데모 준비물](optimized/portfolio/README.md)을 갖춘 뒤 실행한다. 새 환경 설치나 전체 재학습을 문서 수정 때마다 반복한 것은 아니다.
 
-## 이전 문서와 평가 기록
+## 남은 부분
 
-초기 프로토타입의 데이터 흐름·DB·배포 설명은 [이전 README 기록](https://github.com/KMINNNNJ/recommendation_system/blob/8058c866bc44a9cbccce0d60532502c91aa310b4/README.md)에 보존했습니다. 해당 문서의 Precision·Recall·AUC 향상은 초기 노트북의 무작위 리뷰 분할 결과입니다. 이 문서의 신규 사용자 분리 평가와는 평가 조건이 다르므로 향상률을 직접 비교하지 않습니다.
+네 개 프로필과 조건이 같으면 같은 추천을 받는다. 피부 고민·제형 취향을 직접 학습할 데이터는 아직 없다. 리뷰 작성자를 대상으로 한 한 번의 사용자 분리 평가라, 실제 신규 가입자 반응과 여러 seed에서의 안정성도 더 확인해야 한다.
+
+상품 쏠림과 새 모델의 서비스 연결도 남아 있다. 초기 구현과 과거 평가 수치는 [이전 README](https://github.com/KMINNNNJ/recommendation_system/blob/8058c866bc44a9cbccce0d60532502c91aa310b4/README.md)에 보존했다. 당시 무작위 리뷰 분할 수치는 이번 신규 사용자 평가와 직접 비교하지 않는다.
