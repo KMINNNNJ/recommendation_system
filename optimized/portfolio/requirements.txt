@@ -1,0 +1,7 @@
+# Tested with Python 3.11.9. LightFM private build instructions: README.md.
+streamlit==1.63.0
+numpy==2.4.6
+pandas==3.0.5
+scipy==1.17.1
+scikit-learn==1.9.0
+joblib==1.6.0

@@ -1,0 +1,40 @@
+{
+  "source_notebook": "C:\\Users\\user\\Downloads\\추천 시스템 모델.ipynb",
+  "sha256": "fde4b37a958b3034dba2c505fbaa5e8c9b4966232fbd387bc4e722fb14ed98ba",
+  "reviewed_cells": [
+    94,
+    113,
+    114,
+    97,
+    98,
+    99,
+    100,
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108,
+    109,
+    110,
+    111,
+    115,
+    117,
+    118
+  ],
+  "equivalent_reordering": "Apply original k-core before per-row feature construction; values unchanged for retained IDs.",
+  "historical_random_split_metrics": {
+    "baseline_20_epochs": {
+      "precision@10": 0.015545,
+      "recall@10": 0.110722,
+      "auc": 0.854744
+    },
+    "tuned_30_epochs": {
+      "precision@10": 0.017057,
+      "recall@10": 0.118033,
+      "auc": 0.865102
+    }
+  }
+}

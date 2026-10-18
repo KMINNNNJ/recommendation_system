@@ -83,3 +83,6 @@ mariadb
 *.jpg
 venv/ 
 .env
+
+# Separate service environments
+.venv-*/
